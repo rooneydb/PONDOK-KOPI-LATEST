@@ -1,0 +1,216 @@
+ <!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pondok Kopi POS & Dashboard</title>
+    <style>
+        :root { --cream: #F5F5DC; --white: #FFFFFF; --coffee: #6F4E37; --dark-coffee: #3C2A21; --light-brown: #A67B5B; }
+        body { font-family: 'Segoe UI', sans-serif; background-color: var(--cream); color: var(--dark-coffee); margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        header { background-color: var(--coffee); color: var(--white); padding: 10px 15px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 5px; }
+        .nav-group { display: flex; gap: 5px; }
+        .tab-btn { background: var(--dark-coffee); color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 0.8rem; }
+        .add-btn { background: #27ae60; }
+        .main-container { display: flex; flex: 1; overflow: hidden; padding: 10px; gap: 10px; }
+        .view { display: none; width: 100%; height: 100%; }
+        .view.active { display: flex; }
+        .menu-section { flex: 2; display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); grid-auto-rows: min-content; gap: 8px; overflow-y: auto; }
+        .menu-item { background: var(--white); border: 1px solid var(--light-brown); border-radius: 8px; padding: 10px 5px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.05); position: relative; }
+        .menu-item:active { background: var(--light-brown); color: white; }
+        .menu-item h3 { margin: 0; font-size: 0.8rem; }
+        .menu-item p { margin: 5px 0 0; font-weight: bold; color: var(--coffee); font-size: 0.75rem; }
+        .order-section { flex: 1.2; background: var(--white); border-radius: 12px; display: flex; flex-direction: column; padding: 15px; box-shadow: -2px 0 10px rgba(0,0,0,0.05); }
+        .order-list { flex: 1; overflow-y: auto; border-bottom: 2px solid var(--cream); }
+        .order-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; font-size: 0.8rem; align-items: center; }
+        .btn-remove { background: #ff7675; color: white; border: none; border-radius: 4px; padding: 2px 8px; margin-left: 5px; cursor: pointer; }
+        #order-remark { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid var(--light-brown); border-radius: 5px; box-sizing: border-box; }
+        .btn-checkout { background: var(--coffee); color: white; border: none; padding: 15px; border-radius: 8px; width: 100%; font-weight: bold; font-size: 1rem; cursor: pointer; }
+        
+        /* Modal Style */
+        .modal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; }
+        .modal-content { background: white; padding: 20px; border-radius: 10px; width: 90%; max-width: 400px; }
+        .modal-content input { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
+
+        .dashboard-container { flex-direction: column; overflow-y: auto; width: 100%; padding: 10px; box-sizing: border-box; }
+        .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        .stat-card { background: white; padding: 15px; border-radius: 10px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; background: white; border-radius: 10px; overflow: hidden; font-size: 0.75rem; }
+        th, td { padding: 10px; border-bottom: 1px solid #eee; text-align: left; }
+        th { background: var(--coffee); color: white; }
+        @media (max-width: 768px) { .main-container { flex-direction: column; } .order-section { height: 350px; flex: none; } }
+    </style>
+</head>
+<body>
+
+<header>
+    <h2 style="margin:0; font-size: 1rem;">PONDOK KOPI</h2>
+    <div class="nav-group">
+        <button class="tab-btn add-btn" onclick="openModal()">+ Menu</button>
+        <button class="tab-btn" onclick="showView('pos-view')">POS</button>
+        <button class="tab-btn" onclick="showView('dash-view')">DASH</button>
+    </div>
+</header>
+
+<div id="menuModal" class="modal">
+    <div class="modal-content">
+        <h3>Tambah Menu Baru</h3>
+        <input type="text" id="new-item-name" placeholder="Nama Menu (e.g. Mocha Cold)">
+        <input type="number" id="new-item-price" placeholder="Harga (RM)">
+        <div style="display:flex; gap:10px;">
+            <button class="btn-checkout" onclick="addNewMenu()">Simpan</button>
+            <button class="btn-checkout" style="background:#ccc;" onclick="closeModal()">Batal</button>
+        </div>
+    </div>
+</div>
+
+<div class="main-container">
+    <div id="pos-view" class="view active">
+        <div class="menu-section" id="menu-grid"></div>
+        <div class="order-section">
+            <h3 style="margin:0; font-size: 1rem;">Order Semasa</h3>
+            <div class="order-list" id="current-order"></div>
+            <input type="text" id="order-remark" placeholder="Remark (e.g. Kurang manis)">
+            <div style="display:flex; justify-content:space-between; font-weight:bold; padding: 10px 0; border-top: 1px solid #eee;">
+                <span>TOTAL:</span><span id="grand-total">RM 0.00</span>
+            </div>
+            <button class="btn-checkout" onclick="checkout()">SELESAI</button>
+        </div>
+    </div>
+
+    <div id="dash-view" class="view dashboard-container">
+        <div class="stat-grid">
+            <div class="stat-card"><p style="margin:0; font-size:0.8rem;">Jualan Hari Ini</p><h2 id="dash-today-sales">RM 0.00</h2></div>
+            <div class="stat-card"><p style="margin:0; font-size:0.8rem;">Total Cup</p><h2 id="dash-today-cups">0</h2></div>
+        </div>
+        <h3>History Jualan</h3>
+        <table id="history-table">
+            <thead><tr><th>Masa</th><th>Item</th><th>Total</th></tr></thead>
+            <tbody></tbody>
+        </table>
+        <button onclick="clearHistory()" style="margin-top:20px; color:red; background:none; border:1px solid red; padding:8px; border-radius:5px; width:100%;">Padam Semua Rekod</button>
+        <button onclick="resetCustomMenu()" style="margin-top:10px; color:gray; background:none; border:1px solid gray; padding:8px; border-radius:5px; width:100%;">Reset Menu Asal</button>
+    </div>
+</div>
+
+<script>
+    const defaultMenu = [
+        { id: 1, nama: 'Americano (H)', harga: 6.00 }, { id: 2, nama: 'Americano (C)', harga: 7.00 },
+        { id: 3, nama: 'Latte (H)', harga: 8.00 }, { id: 4, nama: 'Latte (C)', harga: 9.00 },
+        { id: 13, nama: 'Matcha Latte (H)', harga: 9.00 }, { id: 14, nama: 'Matcha Latte (C)', harga: 10.00 },
+        { id: 23, nama: 'Chocolate (H)', harga: 8.00 }, { id: 24, nama: 'Chocolate (C)', harga: 9.00 },
+        { id: 39, nama: 'Roti Bakar Kaya', harga: 3.00 }, { id: 40, nama: 'Roti Bakar Choc', harga: 4.00 }
+    ];
+
+    let currentOrder = [];
+    let customMenu = JSON.parse(localStorage.getItem('pondok_menu')) || defaultMenu;
+
+    function showView(viewId) {
+        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+        document.getElementById(viewId).classList.add('active');
+        if(viewId === 'dash-view') updateDashboard();
+    }
+
+    function renderMenu() {
+        const menuGrid = document.getElementById('menu-grid');
+        menuGrid.innerHTML = '';
+        customMenu.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'menu-item';
+            div.onclick = () => addToOrder(item);
+            div.innerHTML = `<h3>${item.nama}</h3><p>RM ${item.harga.toFixed(2)}</p>`;
+            menuGrid.appendChild(div);
+        });
+    }
+
+    function addToOrder(item) {
+        const wujud = currentOrder.find(o => o.id === item.id);
+        wujud ? wujud.kuantiti++ : currentOrder.push({...item, kuantiti: 1});
+        updateOrderList();
+    }
+
+    function updateOrderList() {
+        const list = document.getElementById('current-order');
+        let total = 0;
+        list.innerHTML = '';
+        currentOrder.forEach(item => {
+            const sub = item.harga * item.kuantiti;
+            total += sub;
+            list.innerHTML += `<div class="order-row">
+                <span>${item.nama} x${item.kuantiti}</span>
+                <span>RM ${sub.toFixed(2)} <button class="btn-remove" onclick="buangItem(${item.id})">×</button></span>
+            </div>`;
+        });
+        document.getElementById('grand-total').innerText = `RM ${total.toFixed(2)}`;
+    }
+
+    function buangItem(id) {
+        const idx = currentOrder.findIndex(o => o.id === id);
+        if(currentOrder[idx].kuantiti > 1) currentOrder[idx].kuantiti--;
+        else currentOrder.splice(idx, 1);
+        updateOrderList();
+    }
+
+    function checkout() {
+        if(currentOrder.length === 0) return;
+        const history = JSON.parse(localStorage.getItem('pondok_sales')) || [];
+        const order = {
+            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+            date: new Date().toLocaleDateString(),
+            items: [...currentOrder],
+            remark: document.getElementById('order-remark').value,
+            total: currentOrder.reduce((s, i) => s + (i.harga * i.kuantiti), 0),
+            cups: currentOrder.reduce((s, i) => s + i.kuantiti, 0)
+        };
+        history.push(order);
+        localStorage.setItem('pondok_sales', JSON.stringify(history));
+        currentOrder = [];
+        document.getElementById('order-remark').value = '';
+        updateOrderList();
+        alert("Selesai!");
+    }
+
+    function updateDashboard() {
+        const history = JSON.parse(localStorage.getItem('pondok_sales')) || [];
+        const today = new Date().toLocaleDateString();
+        const todaySales = history.filter(h => h.date === today);
+        document.getElementById('dash-today-sales').innerText = `RM ${todaySales.reduce((s, h) => s + h.total, 0).toFixed(2)}`;
+        document.getElementById('dash-today-cups').innerText = todaySales.reduce((s, h) => s + h.cups, 0);
+        const tbody = document.querySelector('#history-table tbody');
+        tbody.innerHTML = '';
+        history.slice().reverse().forEach(h => {
+            tbody.innerHTML += `<tr><td>${h.time}</td><td>${h.items.map(i => i.nama).join(', ')}</td><td>RM ${h.total.toFixed(2)}</td></tr>`;
+        });
+    }
+
+    /* Modal Functions */
+    function openModal() { document.getElementById('menuModal').style.display = 'flex'; }
+    function closeModal() { document.getElementById('menuModal').style.display = 'none'; }
+
+    function addNewMenu() {
+        const name = document.getElementById('new-item-name').value;
+        const price = parseFloat(document.getElementById('new-item-price').value);
+        if(!name || !price) return alert("Isi nama dan harga!");
+        
+        const newItem = { id: Date.now(), nama: name, harga: price };
+        customMenu.push(newItem);
+        localStorage.setItem('pondok_menu', JSON.stringify(customMenu));
+        renderMenu();
+        closeModal();
+        document.getElementById('new-item-name').value = '';
+        document.getElementById('new-item-price').value = '';
+    }
+
+    function resetCustomMenu() {
+        if(confirm("Padam menu tambahan dan kembali ke asal?")) {
+            localStorage.removeItem('pondok_menu');
+            customMenu = [...defaultMenu];
+            renderMenu();
+        }
+    }
+
+    function clearHistory() { if(confirm("Padam sejarah jualan?")) { localStorage.removeItem('pondok_sales'); updateDashboard(); } }
+
+    renderMenu();
+</script>
+</body>
+</html>
